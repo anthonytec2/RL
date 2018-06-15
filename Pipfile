@@ -1,0 +1,14 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+numpy = "==1.14.3"
+jupyterlab = "==0.32.1"
+gym = "==0.10.5"
+
+[dev-packages]
+
+[requires]
+python_version = "3.6"
