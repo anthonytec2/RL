@@ -1,3 +1,5 @@
-*.mp4
-*.json
-.ipynb_checkpoints/
+.ipynb_checkpoints/*
+.vscode/*
+runs/*
+*.pyc
+*.tfevents.*
