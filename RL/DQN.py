@@ -16,14 +16,14 @@ def create_new_batch(env, frame_skip, act=-1):
     if act == -1:
         for i in range(frame_skip):
             img = env.render(mode='rgb_array')
-            img_ls.append(cnn.composed(img))
+            img_ls.append(cnn.composed(img).squeeze())
             env.step(i % 2)
     else:
         for i in range(frame_skip):
             img = env.render(mode='rgb_array')
-            img_ls.append(cnn.composed(img))
+            img_ls.append(cnn.composed(img).squeeze())
             env.step(act)
-    return torch.stack(img_ls)
+    return torch.stack(img_ls).unsqueeze(0)
 
 
 def bound_reward(reward):
@@ -49,22 +49,22 @@ def main():
     T = 50  # Number of steps to take maximum
     epsilon = 1  # Choose random actions prob
     save_iter = 100
-    gamma = .9  # Forgetting factor of the past
+    gamma = .99  # Forgetting factor of the past
     batch_size = 32  # Number of elements to sample from replay memory
     num_frames = 0  # Counter for the number of frames
     frame_skip = 4  # Number of frames to wait before selecting a new action
     env = gym.make('CartPole-v0')
     er = erp.experience_replay(D)
     reward_ls = []
+    loss_fn = torch.nn.MSELoss(reduction='sum')
     env.reset()
     writer = SummaryWriter()
-    writer.add_graph(cnn.model, torch.autograd.Variable(
-        torch.Tensor(4, 1, 84, 84)))
+    # writer.add_graph(cnn.model, torch.autograd.Variable(
+    #    torch.Tensor(4, 84, 84)))
     for eps in range(M):
         env.reset()
         batch = create_new_batch(env, frame_skip, act=-1)
         reward_gl = 0
-        max_q = 0
         print(eps, epsilon, num_frames)
         for t in range(T):
             if random.random() < epsilon:
@@ -72,14 +72,13 @@ def main():
             else:
                 with torch.no_grad():
                     Q = cnn.model(batch)
-                    if torch.max(Q) > max_q:
-                        max_q = torch.max(Q).item()
+                    print(Q)
                     act = torch.argmax(Q).item()
             _, reward, done, _ = env.step(act)
-            num_frames += frame_skip
             reward = bound_reward(reward)
-            reward_gl += reward
             reward_ls.append(reward)
+            num_frames += frame_skip
+            reward_gl += reward
             if done:
                 er.add_mem(batch, act, reward, False)
             else:
@@ -88,22 +87,31 @@ def main():
                 batch = new_batch
 
             if len(er.replay) > batch_size:
+
                 cnn.optimizer.zero_grad()
-                rnd_mini_batch = er.sample_batch(32)
-                for memory in rnd_mini_batch:
-                    if hasattr(memory.future_state, "shape"):
-                        with torch.no_grad():
-                            y = memory.reward+gamma * \
-                                torch.max(cnn.model(memory.future_state))
-                    else:
-                        y = memory.reward
-                    loss = (y-cnn.model(memory.state)[act])**2
-                    loss.backward()
+                state_batch, action_batch, reward_batch, next_state_batch = er.sample_batch(
+                    batch_size)
+                state_back = torch.stack(state_batch)
+                act = torch.tensor(action_batch)
+                rew = torch.tensor(reward_batch)
+                mask_nd = torch.tensor([
+                    type(mem) == torch.Tensor for mem in next_state_batch])
+                non_final_next_states = torch.stack([s.squeeze(0) for i, s in enumerate(next_state_batch)
+                                                     if mask_nd[i]])
+                Q = cnn.model(state_back).gather(
+                    1, act.unsqueeze(1))
+                Q_opt = torch.zeros(batch_size)
+                Q_opt[mask_nd] = cnn.model(
+                    non_final_next_states).max(1)[0].detach()
+                expected_reward = rew.float()+gamma*Q_opt
+                loss = loss_fn(Q.squeeze(1), expected_reward)
+                cnn.optimizer.zero_grad()
+                loss.backward()
                 cnn.optimizer.step()
+
             if done:
                 break
         writer.add_scalar('data/eps_len', t, num_frames)
-        writer.add_scalar('data/q', t, max_q)
         writer.add_scalar('data/reward', reward_gl, num_frames)
         writer.add_scalar('data/eps', epsilon, num_frames)
         epsilon = eps_anneal(epsilon)
