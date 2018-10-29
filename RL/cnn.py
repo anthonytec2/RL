@@ -33,4 +33,4 @@ model = torch.nn.Sequential(
     Flatten(),
     torch.nn.Linear(2592, 2)
 )
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
