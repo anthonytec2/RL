@@ -31,6 +31,8 @@ model = torch.nn.Sequential(
     torch.nn.Conv2d(16, 32, (4, 4), stride=2),
     torch.nn.ReLU(),
     Flatten(),
-    torch.nn.Linear(2592, 2)
+    torch.nn.Linear(2592, 256),
+    torch.nn.ReLU(),
+    torch.nn.Linear(256, 2)
 )
-optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)

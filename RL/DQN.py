@@ -69,13 +69,13 @@ def main():
     env = gym.make('CartPole-v0')
     er = erp.experience_replay(D)
     reward_ls = []
-    loss_fn = torch.nn.MSELoss(reduction='sum')
+    loss_fn = torch.nn.MSELoss()
     env.reset()
     writer = SummaryWriter()
     loss = 1
     uniform_state = torch.load('uniform_init.pt')
-    #uniform_state = fill_uniform_state_buf(env, frame_skip)
-    #torch.save(torch.stack(uniform_state), 'uniform_init.pt')
+    # uniform_state = fill_uniform_state_buf(env, frame_skip)
+    # torch.save(torch.stack(uniform_state), 'uniform_init.pt')
     # writer.add_graph(cnn.model, torch.autograd.Variable(
     #    torch.Tensor(4, 84, 84)))
     for eps in range(M):
@@ -92,7 +92,7 @@ def main():
                     act = torch.argmax(Q).item()
             _, reward, done, _ = env.step(act)
             reward = bound_reward(reward)
-            reward_ls.append(reward)
+            # reward_ls.append(reward)
             num_frames += frame_skip
             reward_gl += reward
             if done:
@@ -116,9 +116,9 @@ def main():
                     1, act.unsqueeze(1))
                 Q_opt = torch.zeros(batch_size)
                 Q_opt[mask_nd] = cnn.model(
-                    non_final_next_states).max(1)[0].detach()
+                    non_final_next_states).detach().max(1)[0]
                 expected_reward = rew.float()+gamma*Q_opt
-                loss = loss_fn(expected_reward, Q.squeeze(1))
+                loss = loss_fn(Q.squeeze(1), expected_reward)
                 print(loss)
                 cnn.optimizer.zero_grad()
                 loss.backward()
