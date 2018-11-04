@@ -35,4 +35,5 @@ model = torch.nn.Sequential(
     torch.nn.ReLU(),
     torch.nn.Linear(256, 2)
 )
-optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+optimizer = torch.optim.RMSprop(model.parameters(), lr=.00025, momentum=.9)
+#optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)

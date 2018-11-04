@@ -8,7 +8,7 @@ import gym
 import collections
 import random
 from tensorboardX import SummaryWriter
-
+from argparse import ArgumentParser
 
 def create_new_batch(env, frame_skip, act=-1):
     img_ls = []
@@ -39,7 +39,7 @@ def eps_anneal(epsilon):
     if epsilon < .1:
         epsilon = .1
     else:
-        epsilon -= (1-.1)/(1e3)
+        epsilon -= (1-.1)/(2e5)
     return epsilon
 
 
@@ -57,11 +57,14 @@ def fill_uniform_state_buf(env, frame_skip):
 
 
 def main():
+    parser = ArgumentParser(description='PyTorch DQN')
+    parser.add_argument('--exp', type=str, default=None)
+    args = parser.parse_args()
     D = 1e6  # Amnt in replay memory
-    M = 300000  # Number of epsiodes to run
-    T = 50  # Number of steps to take maximum
+    M = 1000000  # Number of epsiodes to run
+    T = 150  # Number of steps to take maximum
     epsilon = 1  # Choose random actions prob
-    save_iter = 100
+    save_iter = 200
     gamma = .99  # Forgetting factor of the past
     batch_size = 32  # Number of elements to sample from replay memory
     num_frames = 0  # Counter for the number of frames
@@ -70,9 +73,13 @@ def main():
     er = erp.experience_replay(D)
     reward_ls = []
     loss_fn = torch.nn.MSELoss()
-    env.reset()
-    writer = SummaryWriter()
+    writer = SummaryWriter(args.exp)
     loss = 1
+    checkpoint=torch.load('model/model.pt')
+    cnn.model.load_state_dict(checkpoint['model_state_dict'])
+    cnn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    num_frames=checkpoint['epoch']
+    epsilon=checkpoint['epsilon']
     uniform_state = torch.load('uniform_init.pt')
     # uniform_state = fill_uniform_state_buf(env, frame_skip)
     # torch.save(torch.stack(uniform_state), 'uniform_init.pt')
@@ -119,7 +126,7 @@ def main():
                     non_final_next_states).detach().max(1)[0]
                 expected_reward = rew.float()+gamma*Q_opt
                 loss = loss_fn(Q.squeeze(1), expected_reward)
-                print(loss)
+                #print(loss)
                 cnn.optimizer.zero_grad()
                 loss.backward()
                 cnn.optimizer.step()
@@ -137,7 +144,8 @@ def main():
             torch.save({
                 'epoch': num_frames,
                 'model_state_dict': cnn.model.state_dict(),
-                'optimizer_state_dict': cnn.optimizer.state_dict()},
+                'optimizer_state_dict': cnn.optimizer.state_dict(),
+                'epsilon': epsilon},
                 'model/model.pt')
     env.close()
     writer.close()
