@@ -9,6 +9,7 @@ import collections
 import random
 from tensorboardX import SummaryWriter
 from argparse import ArgumentParser
+gym.logger.set_level(40)
 
 def create_new_batch(env, frame_skip, act=-1):
     img_ls = []
@@ -57,6 +58,7 @@ def fill_uniform_state_buf(env, frame_skip):
 
 
 def main():
+    device = torch.device('cuda')
     parser = ArgumentParser(description='PyTorch DQN')
     parser.add_argument('--exp', type=str, default=None)
     args = parser.parse_args()
@@ -76,11 +78,12 @@ def main():
     writer = SummaryWriter(args.exp)
     loss = 1
     checkpoint=torch.load('model/model.pt')
-    cnn.model.load_state_dict(checkpoint['model_state_dict'])
-    cnn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    num_frames=checkpoint['epoch']
-    epsilon=checkpoint['epsilon']
+    #cnn.model.load_state_dict(checkpoint['model_state_dict'])
+    #cnn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    #num_frames=checkpoint['epoch']
+    #epsilon=checkpoint['epsilon']
     uniform_state = torch.load('uniform_init.pt')
+    cnn.model=cnn.model.to(device)
     # uniform_state = fill_uniform_state_buf(env, frame_skip)
     # torch.save(torch.stack(uniform_state), 'uniform_init.pt')
     # writer.add_graph(cnn.model, torch.autograd.Variable(
@@ -113,15 +116,17 @@ def main():
                 state_batch, action_batch, reward_batch, next_state_batch = er.sample_batch(
                     batch_size)
                 state_back = torch.stack(state_batch)
-                act = torch.tensor(action_batch)
-                rew = torch.tensor(reward_batch)
+                state_back=state_back
+                act = torch.tensor(action_batch).to(device)
+                rew = torch.tensor(reward_batch).to(device)
                 mask_nd = torch.tensor([
                     type(mem) == torch.Tensor for mem in next_state_batch])
                 non_final_next_states = torch.stack([s.squeeze(0) for i, s in enumerate(next_state_batch)
                                                      if mask_nd[i]])
-                Q = cnn.model(state_back).gather(
+                Q = cnn.model(state_back)
+                Q=Q.gather(
                     1, act.unsqueeze(1))
-                Q_opt = torch.zeros(batch_size)
+                Q_opt = torch.zeros(batch_size).to(device)
                 Q_opt[mask_nd] = cnn.model(
                     non_final_next_states).detach().max(1)[0]
                 expected_reward = rew.float()+gamma*Q_opt
@@ -136,9 +141,9 @@ def main():
         writer.add_scalar('data/eps_len', t, num_frames)
         writer.add_scalar('data/reward', reward_gl, num_frames)
         writer.add_scalar('data/eps', epsilon, num_frames)
-        with torch.no_grad():
-            writer.add_scalar(
-                'data/avg_Q', torch.mean(torch.max(cnn.model(uniform_state), 1)[0]), num_frames)
+        #with torch.no_grad():
+        #    writer.add_scalar(
+        #        'data/avg_Q', torch.mean(torch.max(cnn.model(uniform_state), 1)[0]), num_frames)
         epsilon = eps_anneal(epsilon)
         if eps % save_iter == 0:
             torch.save({
