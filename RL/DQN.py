@@ -17,14 +17,14 @@ def create_new_batch(env, frame_skip, act=-1):
     if act == -1:
         for i in range(frame_skip):
             img = env.render(mode='rgb_array')
-            img_ls.append((1/255)*cnn.composed(img).squeeze())
+            img_ls.append(cnn.composed(img).squeeze())
             env.step(i % 2)
     else:
         for i in range(frame_skip):
             img = env.render(mode='rgb_array')
-            img_ls.append((1/255)*cnn.composed(img).squeeze())
+            img_ls.append(cnn.composed(img).squeeze())
             env.step(act)
-    return torch.stack(img_ls).unsqueeze(0)
+    return torch.stack(img_ls).unsqueeze(0).byte()
 
 
 def bound_reward(reward):
@@ -98,7 +98,7 @@ def main():
                 act = env.action_space.sample()
             else:
                 with torch.no_grad():
-                    Q = cnn.model(batch.to(device))
+                    Q = cnn.model(batch.to(device).float())
                     act = torch.argmax(Q).item()
             _, reward, done, _ = env.step(act)
             reward = bound_reward(reward)
@@ -106,23 +106,23 @@ def main():
             num_frames += frame_skip
             reward_gl += reward
             if done:
-                er.add_mem(batch.cpu(), act, reward, False)
+                er.add_mem(batch.cpu().byte(), act, reward, False)
             else:
                 new_batch = create_new_batch(env, frame_skip, act=act)
-                er.add_mem(batch.cpu(), act, reward, new_batch.cpu())
+                er.add_mem(batch.cpu().byte(), act, reward, new_batch.cpu())
                 batch = new_batch
 
             if len(er.replay) > batch_size:
                 state_batch, action_batch, reward_batch, next_state_batch = er.sample_batch(
                     batch_size)
                 state_back = torch.stack(state_batch)
-                state_back=state_back.to(device)
+                state_back=state_back.to(device).float()*(1/255)
                 act = torch.tensor(action_batch).to(device)
                 rew = torch.tensor(reward_batch).to(device)
                 mask_nd = torch.tensor([
                     type(mem) == torch.Tensor for mem in next_state_batch]).to(device)
                 non_final_next_states = torch.stack([s.squeeze(0) for i, s in enumerate(next_state_batch)
-                                                     if mask_nd[i]]).to(device)
+                                                     if mask_nd[i]]).to(device).float()*(1/255)
                 Q = cnn.model(state_back)
                 Q=Q.gather(
                     1, act.unsqueeze(1))
