@@ -90,7 +90,7 @@ def main():
     #    torch.Tensor(4, 84, 84)))
     for eps in range(M):
         env.reset()
-        batch = create_new_batch(env, frame_skip, act=-1)
+        batch = create_new_batch(env, frame_skip, act=-1).to(device)
         reward_gl = 0
         print(eps, epsilon, num_frames)
         for t in range(T):
@@ -98,7 +98,7 @@ def main():
                 act = env.action_space.sample()
             else:
                 with torch.no_grad():
-                    Q = cnn.model(batch)
+                    Q = cnn.model(batch.to(device))
                     act = torch.argmax(Q).item()
             _, reward, done, _ = env.step(act)
             reward = bound_reward(reward)
@@ -106,23 +106,23 @@ def main():
             num_frames += frame_skip
             reward_gl += reward
             if done:
-                er.add_mem(batch, act, reward, False)
+                er.add_mem(batch.cpu(), act, reward, False)
             else:
                 new_batch = create_new_batch(env, frame_skip, act=act)
-                er.add_mem(batch, act, reward, new_batch)
+                er.add_mem(batch.cpu(), act, reward, new_batch.cpu())
                 batch = new_batch
 
             if len(er.replay) > batch_size:
                 state_batch, action_batch, reward_batch, next_state_batch = er.sample_batch(
                     batch_size)
                 state_back = torch.stack(state_batch)
-                state_back=state_back
+                state_back=state_back.to(device)
                 act = torch.tensor(action_batch).to(device)
                 rew = torch.tensor(reward_batch).to(device)
                 mask_nd = torch.tensor([
-                    type(mem) == torch.Tensor for mem in next_state_batch])
+                    type(mem) == torch.Tensor for mem in next_state_batch]).to(device)
                 non_final_next_states = torch.stack([s.squeeze(0) for i, s in enumerate(next_state_batch)
-                                                     if mask_nd[i]])
+                                                     if mask_nd[i]]).to(device)
                 Q = cnn.model(state_back)
                 Q=Q.gather(
                     1, act.unsqueeze(1))

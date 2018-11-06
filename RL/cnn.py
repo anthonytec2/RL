@@ -23,7 +23,7 @@ class dqn(nn.Module):
         self.conv2=torch.nn.Conv2d(16, 32, (4, 4), stride=2)
         self.fc1=torch.nn.Linear(2592, 256)
         self.fc2=torch.nn.Linear(256, 2)
-    def foward(self, x):
+    def forward(self, x):
         x=F.relu(self.conv1(x))
         x=F.relu(self.conv2(x))
         x=x.view(x.size(0),-1)
