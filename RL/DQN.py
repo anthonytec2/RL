@@ -17,14 +17,14 @@ def create_new_batch(env, frame_skip, act=-1):
     if act == -1:
         for i in range(frame_skip):
             img = env.render(mode='rgb_array')
-            img_ls.append(cnn.composed(img).squeeze())
+            img_ls.append(255*cnn.composed(img).squeeze())
             env.step(i % 2)
     else:
         for i in range(frame_skip):
             img = env.render(mode='rgb_array')
-            img_ls.append(cnn.composed(img).squeeze())
+            img_ls.append(255*cnn.composed(img).squeeze())
             env.step(act)
-    return torch.stack(img_ls).unsqueeze(0).byte()
+    return (torch.stack(img_ls).unsqueeze(0)).byte()
 
 
 def bound_reward(reward):
@@ -98,7 +98,7 @@ def main():
                 act = env.action_space.sample()
             else:
                 with torch.no_grad():
-                    Q = cnn.model(batch.to(device).float())
+                    Q = cnn.model(batch.to(device).float()*(1/255))
                     act = torch.argmax(Q).item()
             _, reward, done, _ = env.step(act)
             reward = bound_reward(reward)
