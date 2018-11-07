@@ -71,21 +71,28 @@ def main():
     batch_size = 32  # Number of elements to sample from replay memory
     num_frames = 0  # Counter for the number of frames
     frame_skip = 4  # Number of frames to wait before selecting a new action
+    TARGET_UPDATE=10
     env = gym.make('CartPole-v0')
     er = erp.experience_replay(D)
     reward_ls = []
-    loss_fn = torch.nn.MSELoss()
+    #loss_fn = torch.nn.MSELoss()
     writer = SummaryWriter(args.exp)
     loss = 1
+    target_model=cnn.dqn()
+    policy_model=cnn.dqn()
+    optimizer = torch.optim.RMSprop(policy_model.parameters(), lr=.00025, momentum=.9)
     checkpoint=torch.load('model/model.pt')
-    cnn.model.load_state_dict(checkpoint['model_state_dict'])
-    cnn.model=cnn.model.to(device)
-    cnn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    target_model.load_state_dict(checkpoint['model_state_dict'])
+    policy_model.load_state_dict(checkpoint['model_state_dict'])
+    target_model.eval()
+    target_model=target_model.to(device)
+    policy_model=policy_model.to(device)
+    #cnn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #num_frames=checkpoint['epoch']
     #epsilon=checkpoint['epsilon']
     uniform_state = torch.load('uniform_init.pt').to(device)
-    # uniform_state = fill_uniform_state_buf(env, frame_skip)
-    # torch.save(torch.stack(uniform_state), 'uniform_init.pt')
+    #uniform_state = fill_uniform_state_buf(env, frame_skip)
+    #torch.save(torch.stack(uniform_state), 'uniform_init.pt')
     # writer.add_graph(cnn.model, torch.autograd.Variable(
     #    torch.Tensor(4, 84, 84)))
     for eps in range(M):
@@ -98,7 +105,7 @@ def main():
                 act = env.action_space.sample()
             else:
                 with torch.no_grad():
-                    Q = cnn.model(batch.to(device).float()*(1/255))
+                    Q = policy_model(batch.to(device).float()*(1/255))
                     act = torch.argmax(Q).item()
             _, reward, done, _ = env.step(act)
             reward = bound_reward(reward)
@@ -123,18 +130,20 @@ def main():
                     type(mem) == torch.Tensor for mem in next_state_batch]).to(device)
                 non_final_next_states = torch.stack([s.squeeze(0) for i, s in enumerate(next_state_batch)
                                                      if mask_nd[i]]).to(device).float()*(1/255)
-                Q = cnn.model(state_back)
+                Q = policy_model(state_back)
                 Q=Q.gather(
                     1, act.unsqueeze(1))
                 Q_opt = torch.zeros(batch_size).to(device)
-                Q_opt[mask_nd] = cnn.model(
+                Q_opt[mask_nd] = target_model(
                     non_final_next_states).detach().max(1)[0]
                 expected_reward = rew.float()+gamma*Q_opt
-                loss = loss_fn(Q.squeeze(1), expected_reward)
+                loss=torch.sum(torch.clamp((Q.squeeze(1)-expected_reward),-1,1)**2)
+
+                #loss = loss_fn(Q.squeeze(1), expected_reward)
                 #print(loss)
-                cnn.optimizer.zero_grad()
+                optimizer.zero_grad()
                 loss.backward()
-                cnn.optimizer.step()
+                optimizer.step()
 
             if done:
                 break
@@ -143,15 +152,18 @@ def main():
         writer.add_scalar('data/eps', epsilon, num_frames)
         with torch.no_grad():
             writer.add_scalar(
-                'data/avg_Q', torch.mean(torch.max(cnn.model(uniform_state), 1)[0]), num_frames)
+                'data/avg_Q', torch.mean(torch.max(policy_model(uniform_state.float()*(1/255)), 1)[0]), num_frames)
         epsilon = eps_anneal(epsilon)
         if eps % save_iter == 0:
             torch.save({
                 'epoch': num_frames,
-                'model_state_dict': cnn.model.state_dict(),
-                'optimizer_state_dict': cnn.optimizer.state_dict(),
+                'model_state_dict': policy_model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
                 'epsilon': epsilon},
                 'model/model.pt')
+        if eps % TARGET_UPDATE==0:
+            target_model.load_state_dict(policy_model.state_dict())
+            
     env.close()
     writer.close()
 

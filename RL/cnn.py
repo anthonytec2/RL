@@ -19,13 +19,16 @@ class Flatten(torch.nn.Module):
 class dqn(nn.Module):
     def __init__(self):
         super(dqn, self).__init__()
-        self.conv1=torch.nn.Conv2d(4, 16, (8, 8), stride=4)
-        self.conv2=torch.nn.Conv2d(16, 32, (4, 4), stride=2)
-        self.fc1=torch.nn.Linear(2592, 256)
-        self.fc2=torch.nn.Linear(256, 2)
+        self.conv1=torch.nn.Conv2d(4, 32, (8, 8), stride=4)
+        self.conv2=torch.nn.Conv2d(32, 64, (4, 4), stride=2)
+        self.conv3=torch.nn.Conv2d(64, 64, (3, 3), stride=1)
+        self.fc1=torch.nn.Linear(3136, 512)
+        self.fc2=torch.nn.Linear(512, 2)
+        
     def forward(self, x):
         x=F.relu(self.conv1(x))
         x=F.relu(self.conv2(x))
+        x=F.relu(self.conv3(x))
         x=x.view(x.size(0),-1)
         x=F.relu(self.fc1(x))
         x=self.fc2(x)
@@ -49,6 +52,5 @@ modela = torch.nn.Sequential(
     torch.nn.ReLU(),
     torch.nn.Linear(256, 2)
 )
-model=dqn()
-optimizer = torch.optim.RMSprop(model.parameters(), lr=.00025, momentum=.9)
+
 #optimizer = torch.optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
