@@ -40,7 +40,7 @@ def eps_anneal(epsilon):
     if epsilon < .1:
         epsilon = .1
     else:
-        epsilon -= (1-.1)/(2e5)
+        epsilon -= (1-.1)/(3e5)
     return epsilon
 
 
@@ -78,12 +78,12 @@ def main():
     writer = SummaryWriter(args.exp)
     loss = 1
     checkpoint=torch.load('model/model.pt')
-    #cnn.model.load_state_dict(checkpoint['model_state_dict'])
-    #cnn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    cnn.model.load_state_dict(checkpoint['model_state_dict'])
+    cnn.model=cnn.model.to(device)
+    cnn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     #num_frames=checkpoint['epoch']
     #epsilon=checkpoint['epsilon']
-    uniform_state = torch.load('uniform_init.pt')
-    cnn.model=cnn.model.to(device)
+    uniform_state = torch.load('uniform_init.pt').to(device)
     # uniform_state = fill_uniform_state_buf(env, frame_skip)
     # torch.save(torch.stack(uniform_state), 'uniform_init.pt')
     # writer.add_graph(cnn.model, torch.autograd.Variable(
@@ -141,9 +141,9 @@ def main():
         writer.add_scalar('data/eps_len', t, num_frames)
         writer.add_scalar('data/reward', reward_gl, num_frames)
         writer.add_scalar('data/eps', epsilon, num_frames)
-        #with torch.no_grad():
-        #    writer.add_scalar(
-        #        'data/avg_Q', torch.mean(torch.max(cnn.model(uniform_state), 1)[0]), num_frames)
+        with torch.no_grad():
+            writer.add_scalar(
+                'data/avg_Q', torch.mean(torch.max(cnn.model(uniform_state), 1)[0]), num_frames)
         epsilon = eps_anneal(epsilon)
         if eps % save_iter == 0:
             torch.save({
