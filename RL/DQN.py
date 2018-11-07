@@ -40,7 +40,7 @@ def eps_anneal(epsilon):
     if epsilon < .1:
         epsilon = .1
     else:
-        epsilon -= (1-.1)/(3e5)
+        epsilon -= (1-.1)/(1.5e5)
     return epsilon
 
 
@@ -72,18 +72,20 @@ def main():
     num_frames = 0  # Counter for the number of frames
     frame_skip = 4  # Number of frames to wait before selecting a new action
     TARGET_UPDATE=10
+    updates=0
     env = gym.make('CartPole-v0')
     er = erp.experience_replay(D)
     reward_ls = []
     #loss_fn = torch.nn.MSELoss()
+    loss_fn = torch.nn.SmoothL1Loss()
     writer = SummaryWriter(args.exp)
     loss = 1
     target_model=cnn.dqn()
     policy_model=cnn.dqn()
     optimizer = torch.optim.RMSprop(policy_model.parameters(), lr=.00025, momentum=.9)
     checkpoint=torch.load('model/model.pt')
-    target_model.load_state_dict(checkpoint['model_state_dict'])
-    policy_model.load_state_dict(checkpoint['model_state_dict'])
+    #target_model.load_state_dict(checkpoint['model_state_dict'])
+    #policy_model.load_state_dict(checkpoint['model_state_dict'])
     target_model.eval()
     target_model=target_model.to(device)
     policy_model=policy_model.to(device)
@@ -99,7 +101,7 @@ def main():
         env.reset()
         batch = create_new_batch(env, frame_skip, act=-1).to(device)
         reward_gl = 0
-        print(eps, epsilon, num_frames)
+        print(eps, updates, epsilon, num_frames)
         for t in range(T):
             if random.random() < epsilon:
                 act = env.action_space.sample()
@@ -120,6 +122,7 @@ def main():
                 batch = new_batch
 
             if len(er.replay) > batch_size:
+                updates+=1
                 state_batch, action_batch, reward_batch, next_state_batch = er.sample_batch(
                     batch_size)
                 state_back = torch.stack(state_batch)
@@ -137,9 +140,8 @@ def main():
                 Q_opt[mask_nd] = target_model(
                     non_final_next_states).detach().max(1)[0]
                 expected_reward = rew.float()+gamma*Q_opt
-                loss=torch.sum(torch.clamp((Q.squeeze(1)-expected_reward),-1,1)**2)
-
-                #loss = loss_fn(Q.squeeze(1), expected_reward)
+                #loss=torch.sum(torch.clamp((Q.squeeze(1)-expected_reward),-1,1)**2)
+                loss = loss_fn(Q.squeeze(1), expected_reward)
                 #print(loss)
                 optimizer.zero_grad()
                 loss.backward()
