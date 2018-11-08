@@ -10,7 +10,6 @@ import random
 from tensorboardX import SummaryWriter
 from argparse import ArgumentParser
 gym.logger.set_level(40)
-
 def create_new_batch(env, frame_skip, act=-1):
     img_ls = []
     done = False
@@ -56,7 +55,6 @@ def fill_uniform_state_buf(env, frame_skip):
                 break
     return uniform_state
 
-
 def main():
     device = torch.device('cuda')
     parser = ArgumentParser(description='PyTorch DQN')
@@ -71,7 +69,7 @@ def main():
     batch_size = 32  # Number of elements to sample from replay memory
     num_frames = 0  # Counter for the number of frames
     frame_skip = 4  # Number of frames to wait before selecting a new action
-    TARGET_UPDATE=10
+    TARGET_UPDATE=1000
     updates=0
     env = gym.make('CartPole-v0')
     er = erp.experience_replay(D)
@@ -84,14 +82,14 @@ def main():
     policy_model=cnn.dqn()
     optimizer = torch.optim.RMSprop(policy_model.parameters(), lr=.00025, momentum=.9)
     checkpoint=torch.load('model/model.pt')
-    #target_model.load_state_dict(checkpoint['model_state_dict'])
-    #policy_model.load_state_dict(checkpoint['model_state_dict'])
+    target_model.load_state_dict(checkpoint['model_state_dict'])
+    policy_model.load_state_dict(checkpoint['model_state_dict'])
     target_model.eval()
     target_model=target_model.to(device)
     policy_model=policy_model.to(device)
-    #cnn.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    #num_frames=checkpoint['epoch']
-    #epsilon=checkpoint['epsilon']
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    num_frames=checkpoint['epoch']
+    epsilon=checkpoint['epsilon']
     uniform_state = torch.load('uniform_init.pt').to(device)
     #uniform_state = fill_uniform_state_buf(env, frame_skip)
     #torch.save(torch.stack(uniform_state), 'uniform_init.pt')
@@ -146,7 +144,9 @@ def main():
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-
+                if updates % TARGET_UPDATE==0:
+                    print('Loading new model')
+                    target_model.load_state_dict(policy_model.state_dict())
             if done:
                 break
         writer.add_scalar('data/eps_len', t, num_frames)
@@ -163,8 +163,7 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict(),
                 'epsilon': epsilon},
                 'model/model.pt')
-        if eps % TARGET_UPDATE==0:
-            target_model.load_state_dict(policy_model.state_dict())
+                
             
     env.close()
     writer.close()
